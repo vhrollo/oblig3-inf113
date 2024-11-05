@@ -8,7 +8,7 @@ HEADER_START = 0x0
 # 1 byte counter for the number of files
 COUNTER_BYTES = 0x1
 # size of file info entry (filename, ...)
-FILE_ENTRY_SIZE = 0x10 # this can and prob should be made bigger, but i will keep it for now
+FILE_ENTRY_SIZE = 0x11 # this can and prob should be made bigger, but i will keep it for now
 # size of a file block (content of a file)
 FILE_BLOCK_SIZE = 0x100
 # max number of files (first block is reserved for metainfo, rest are files)

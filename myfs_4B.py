@@ -92,8 +92,6 @@ def _set_num_linked_files(f, n):
     bytes = n.to_bytes(COUNTER_HARD_LINK_BYTES, "little", signed=False)
     f.write(bytes)
 
-
-
 def _find_empty_slot(f):
     """
     Finds the first empty slot in the file table.
@@ -105,6 +103,17 @@ def _find_empty_slot(f):
             return pos + 1
     raise NoFreeSpace("No free space available in entries")
 
+def _delete_entry(f, fileno):
+    f.seek(HEADER_START + FILE_ENTRY_SIZE * (fileno+1))
+    f.write(b'\0' * FILE_ENTRY_SIZE)
+
+def _replace_entry(f, fileno, new_fileno):
+    f.seek(HEADER_START + FILE_ENTRY_SIZE * (fileno+1))
+    entry = f.read(FILENAME_SIZE)
+    f.seek(HEADER_START + FILE_ENTRY_SIZE * (new_fileno+1))
+    f.write(entry)
+
+### MAIN FILE SYSTEM OPERATIONS ###
 
 def save(f, filename, content):
     """
@@ -249,14 +258,39 @@ def remove(f, filename):
     fileno = find_fileno(f, filename)
     f.seek(HEADER_START + FILE_ENTRY_SIZE * (fileno+1) + FILENAME_SIZE)
     size_info = int.from_bytes(f.read(FILESIZE_BYTES), "little", signed=False)
+    is_hard_link = size_info & HARD_LINK_MASK
 
-    if size_info & HARD_LINK_MASK:
-        _set_num_linked_files(f, link_existing - 1)
+    # the task very specifically says that it should remove
+    # the highest indexed hard link pointing to the original file
+    if is_hard_link:
+        # If it's a hard link, delete only the link entry
+        _delete_entry(f, fileno)
+        num_linked_files = _get_num_linked_files(f)
+        _set_num_linked_files(f, num_linked_files - 1)
     else:
-        _set_num_files(f, num_existing - 1)
-    
-    f.seek(HEADER_START + FILE_ENTRY_SIZE * (fileno+1))
-    f.write(b'\0' * FILE_ENTRY_SIZE)
+        # If it's an original file, search for the highest indexed hard link pointing to it
+        highest_link_fileno = None
+        for link_fileno in range(MAX_ENTRIES):
+            f.seek(HEADER_START + FILE_ENTRY_SIZE * (link_fileno + 1) + FILENAME_SIZE)
+            link_info = int.from_bytes(f.read(FILESIZE_BYTES), "little", signed=False)
+
+            # check if entry is a hard link and if it points to the original file
+            if link_info & HARD_LINK_MASK and (link_info >> 1) - 1 == fileno:
+                highest_link_fileno = link_fileno
+
+        if highest_link_fileno is not None:
+            # replace original file entry with the highest indexed hard link found
+            _replace_entry(f, highest_link_fileno, fileno)
+            _delete_entry(f, highest_link_fileno)
+
+            # update the hard link count
+            num_linked_files = _get_num_linked_files(f)
+            _set_num_linked_files(f, num_linked_files - 1)
+        else:
+            # if no hard links are found, delete the file entry
+            _delete_entry(f, fileno)
+            num_existing_files = _get_num_files(f)
+            _set_num_files(f, num_existing_files - 1)
 
 
 def hard_link(f, existing_file, link_name):
@@ -286,6 +320,7 @@ def hard_link(f, existing_file, link_name):
     f.seek(HEADER_START + FILE_ENTRY_SIZE * (fileno+1) + FILENAME_SIZE)
     size_info = int.from_bytes(f.read(FILESIZE_BYTES), "little", signed=False)
     
+    # derefrencing the hard link
     if size_info & HARD_LINK_MASK:
         fileno = (size_info >> 1) - 1
 

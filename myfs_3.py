@@ -8,7 +8,7 @@ HEADER_START = 0x0
 # 1 byte counter for the number of files
 COUNTER_BYTES = 0x1
 # size of file info entry (filename, ...)
-FILE_ENTRY_SIZE = 0x10 # this can and prob should be made bigger, but i will keep it for now
+FILE_ENTRY_SIZE = 0x11 # this can and prob should be made bigger, but i will keep it for now
 # size of a file block (content of a file)
 FILE_BLOCK_SIZE = 0x100
 # max number of files (first block is reserved for metainfo, rest are files)
@@ -218,10 +218,11 @@ def remove(f, filename):
     
     fileno = find_fileno(f, filename)
 
-    content_size = find_filesize(f, fileno+1)
+    # since we know how big the data is, we dont need to zero it out
+    #content_size = find_filesize(f, fileno+1)
 
-    f.seek(HEADER_START + FILE_BLOCK_SIZE * (fileno+1))
-    f.write(b'\0' * content_size)
+    #f.seek(HEADER_START + FILE_BLOCK_SIZE * (fileno+1))
+    #f.write(b'\0' * content_size)
 
     f.seek(HEADER_START + FILE_ENTRY_SIZE * (fileno+1))
     f.write(b'\0' * FILE_ENTRY_SIZE)

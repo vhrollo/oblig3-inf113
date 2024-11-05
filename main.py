@@ -1,4 +1,4 @@
-from myfs_4A import format, save, load, copy, remove, hard_link, NoFile
+from myfs_4B import format, save, load, copy, remove, hard_link, NoFile
 import sys
 
 if len(sys.argv) < 2:
@@ -53,6 +53,16 @@ def test_2():
         content = content.decode('utf-8')
         assert content == test_sample
 
+        hard_link(f, "test.txt", "link.txt")
+        content = load(f, "link.txt")
+        content = content.decode('utf-8')
+        assert content == test_sample
+
+        hard_link(f, "link.txt", "link2.txt")
+        content = load(f, "link2.txt")
+        content = content.decode('utf-8')
+        assert content == test_sample
+
 
 def test_3():
     # test that block was not zeroed out when deleted
@@ -101,6 +111,6 @@ print("*" * 60)
 print()
 
 test_1()
-#test_2()
-#test_3()
-#test_4()
+test_2()
+test_3()
+test_4()
