@@ -17,6 +17,7 @@ MAX_FILES = (TOTAL_SIZE - FILE_BLOCK_SIZE) // FILE_BLOCK_SIZE
 MAX_HARD_LINK_FILES = 0 #TODO: Oppgave 4
 
 # this can represent 65536 sizes, which should be plenty
+# this will be halfed as the first bit is reserved as a bit flag
 FILESIZE_BYTES = 0x2
 
 # so that they dont overwrite eachother
@@ -216,9 +217,11 @@ def remove(f, filename):
     """
     
     fileno = find_fileno(f, filename)
-        
+
+    content_size = find_filesize(f, fileno+1)
+
     f.seek(HEADER_START + FILE_BLOCK_SIZE * (fileno+1))
-    f.write(b'\0' * FILE_BLOCK_SIZE)
+    f.write(b'\0' * content_size)
 
     f.seek(HEADER_START + FILE_ENTRY_SIZE * (fileno+1))
     f.write(b'\0' * FILE_ENTRY_SIZE)

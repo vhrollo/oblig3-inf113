@@ -5,8 +5,17 @@ TOTAL_SIZE = 0x800 # 2kB
 
 # Metainfo block
 HEADER_START = 0x0
+
 # 1 byte counter for the number of files
 COUNTER_BYTES = 0x1
+# 1 byte counter for the number of hard linked files
+COUNTER_HARD_LINK_BYTES = 0x1
+
+# pos for counter bytes
+COUNTER_POS = 0x0 # just for clarity
+# pos for hard link counter bytes
+COUNTER_HARD_LINK_POS = 0x1
+
 # size of file info entry (filename, ...)
 FILE_ENTRY_SIZE = 0x10 # this can and prob should be made bigger, but i will keep it for now
 # size of a file block (content of a file)
@@ -14,7 +23,7 @@ FILE_BLOCK_SIZE = 0x100
 # max number of files (first block is reserved for metainfo, rest are files)
 MAX_FILES = (TOTAL_SIZE - FILE_BLOCK_SIZE) // FILE_BLOCK_SIZE
 
-MAX_HARD_LINK_FILES = 0 #TODO: Oppgave 4
+MAX_HARD_LINK_FILES = 0x0 #TODO: Oppgave 4
 
 # this can represent 65536 sizes, which should be plenty
 FILESIZE_BYTES = 0x2
@@ -39,6 +48,12 @@ class EmptyFile(Exception):
         self.message = message
         super().__init__(self.message)
 
+# for clarity
+class EmptyFilename(Exception):
+    def __init__(self, message="Filename cannot be empty"):
+        self.message = message
+        super().__init__(self.message)
+
 
 ###### FILE SYSTEM OPERATIONS ######
 
@@ -51,7 +66,7 @@ def format(f):
 
 
 def _get_num_files(f):
-    f.seek(HEADER_START)
+    f.seek(HEADER_START + COUNTER_POS)
     bytes = f.read(COUNTER_BYTES)
     num = int.from_bytes(bytes, "little", signed=False)
     return num
@@ -59,20 +74,22 @@ def _get_num_files(f):
 
 
 def _set_num_files(f, n):
-    f.seek(HEADER_START)
+    f.seek(HEADER_START + COUNTER_POS)
     bytes = n.to_bytes(COUNTER_BYTES, "little", signed=False)
     f.write(bytes)
 
 
-
 def _get_num_linked_files(f):
-    ... # Oppgave 4
-
+    f.seek(HEADER_START + COUNTER_HARD_LINK_POS)
+    bytes = f.read(COUNTER_HARD_LINK_BYTES)
+    num = int.from_bytes(bytes, "little", signed=False)
+    return num
 
 
 def _set_num_linked_files(f, n):
-    ... # Oppgave 4
-
+    f.seek(HEADER_START + COUNTER_HARD_LINK_POS)
+    bytes = n.to_bytes(COUNTER_HARD_LINK_BYTES, "little", signed=False)
+    f.write(bytes)
 
 
 def save(f, filename, content):
@@ -88,13 +105,16 @@ def save(f, filename, content):
     if not content:
         raise EmptyFile("Content cannot be empty>:(")
 
-    # Find the first available block in the file table
-    num_existing = _get_num_files(f)
-    new_fileno = None
-
+    # felt this was also needed
+    if not filename:
+        raise EmptyFilename("Filename cannot be empty>:(")
+    
     if num_existing >= MAX_FILES:
         raise NoFreeSpace(f"No free space available, max files: {MAX_FILES}")
 
+    # Find the first available block in the file table
+    num_existing = _get_num_files(f)
+    new_fileno = None
 
     # check for available slots
     for pos in range(MAX_FILES):
@@ -112,7 +132,8 @@ def save(f, filename, content):
     # update num files
     _set_num_files(f, num_existing + 1)
 
-    file_size = len(content).to_bytes(FILESIZE_BYTES, "little", signed=False)
+    # im setting the first bit of to to 0, showing that this is not an hardlink
+    file_size = (len(content) << 1).to_bytes(FILESIZE_BYTES, "little", signed=False)
 
     # write filename in ftable next free entry, truncate if needed
     f.seek(HEADER_START + FILE_ENTRY_SIZE * new_fileno)
@@ -166,7 +187,7 @@ def find_filesize(f, fileno):
     f.seek(HEADER_START + FILE_ENTRY_SIZE * fileno + FILENAME_SIZE)
     bytes = f.read(FILESIZE_BYTES)
     num = int.from_bytes(bytes, "little", signed=False)
-    return num
+    return (num >> 1)
 
 
 def load(f, filename):
@@ -216,9 +237,11 @@ def remove(f, filename):
     """
     
     fileno = find_fileno(f, filename)
-        
+
+    content_size = find_filesize(f, fileno+1)
+
     f.seek(HEADER_START + FILE_BLOCK_SIZE * (fileno+1))
-    f.write(b'\0' * FILE_BLOCK_SIZE)
+    f.write(b'\0' * content_size)
 
     f.seek(HEADER_START + FILE_ENTRY_SIZE * (fileno+1))
     f.write(b'\0' * FILE_ENTRY_SIZE)
@@ -238,5 +261,33 @@ def hard_link(f, existing_file, link_name):
         existing_file (str): The name of the existing file.
         link_name (str): The name of the new hard link.
     """
-    #TODO: implement this function
-    ...
+    
+    if not link_name:
+        raise EmptyFilename("Filename cannot be empty>:(")
+
+    if num_existing >= MAX_HARD_LINK_FILES:
+        raise NoFreeSpace(f"No free space available, max hard links: {MAX_HARD_LINK_FILES}")
+    
+    # gets file num
+    fileno = find_fileno(f, existing_file)
+    num_existing = _get_num_linked_files(f)
+    new_fileno = None
+    
+
+    for pos in range(MAX_FILES):
+        f.seek(HEADER_START + (pos + 1) * FILE_ENTRY_SIZE)
+        entry = f.read(FILE_ENTRY_SIZE)
+        if entry == b'\0' * FILE_ENTRY_SIZE:
+            # found a slot
+            new_fileno = pos + 1
+            break
+
+    if new_fileno is None:
+        raise NoFreeSpace(f"No free space available in entries")
+
+    # updating the number of hard linked files 
+    _set_num_linked_files(f, num_existing + 1)
+
+
+
+    
