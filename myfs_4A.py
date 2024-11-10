@@ -30,7 +30,9 @@ MAX_ENTRIES = (FILE_BLOCK_SIZE // FILE_ENTRY_SIZE) - 1
 MAX_HARD_LINK_FILES = MAX_ENTRIES - MAX_FILES
 # hard linked mask (1 bit)
 HARD_LINK_MASK = 0x1
-
+print(MAX_FILES)
+print(MAX_ENTRIES)
+print(MAX_HARD_LINK_FILES)
 # this can represent 65536 bytes, which should be plenty
 # this will be halfed as the first bit is reserved as a bit flag
 FILESIZE_BYTES = 0x2
